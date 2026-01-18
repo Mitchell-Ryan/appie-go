@@ -8,17 +8,28 @@ import (
 
 // listResponse matches the API response for shopping lists.
 type listResponse struct {
-	ID                 string     `json:"id"`
-	Description        string     `json:"description"`
-	ItemCount          int        `json:"itemCount"`
-	HasFavoriteProduct bool       `json:"hasFavoriteProduct"`
-	ProductImages      [][]string `json:"productImages"`
+	ID                 string `json:"id"`
+	Description        string `json:"description"`
+	ItemCount          int    `json:"itemCount"`
+	HasFavoriteProduct bool   `json:"hasFavoriteProduct"`
+	ProductImages      [][]struct {
+		Width  int    `json:"width"`
+		Height int    `json:"height"`
+		URL    string `json:"url"`
+	} `json:"productImages"`
 }
 
 // GetShoppingLists retrieves all shopping lists.
-func (c *Client) GetShoppingLists(ctx context.Context) ([]ShoppingList, error) {
+// The API requires a productId parameter but returns all lists regardless.
+// Pass 0 to use a default product ID.
+func (c *Client) GetShoppingLists(ctx context.Context, productID int) ([]ShoppingList, error) {
+	if productID <= 0 {
+		productID = 1 // Default product ID - API requires it but returns all lists
+	}
+	path := fmt.Sprintf("/mobile-services/lists/v3/lists?productId=%d", productID)
+
 	var result []listResponse
-	if err := c.doRequest(ctx, http.MethodGet, "/mobile-services/lists/v3/lists", nil, &result); err != nil {
+	if err := c.doRequest(ctx, http.MethodGet, path, nil, &result); err != nil {
 		return nil, fmt.Errorf("get shopping lists failed: %w", err)
 	}
 
@@ -37,7 +48,7 @@ func (c *Client) GetShoppingLists(ctx context.Context) ([]ShoppingList, error) {
 // GetShoppingList retrieves the first shopping list.
 // Use GetShoppingLists to get all lists if you have multiple.
 func (c *Client) GetShoppingList(ctx context.Context) (*ShoppingList, error) {
-	lists, err := c.GetShoppingLists(ctx)
+	lists, err := c.GetShoppingLists(ctx, 0)
 	if err != nil {
 		return nil, err
 	}

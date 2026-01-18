@@ -188,13 +188,17 @@ func TestGetOrder(t *testing.T) {
 }
 
 func TestGetShoppingList(t *testing.T) {
-	t.Skip("Shopping list API endpoint needs more discovery - requires productId param")
 	client := testClient(t)
 	ctx := context.Background()
 
-	lists, err := client.GetShoppingLists(ctx)
+	lists, err := client.GetShoppingLists(ctx, 0)
 	if err != nil {
 		t.Fatalf("failed to get shopping lists: %v", err)
+	}
+
+	if len(lists) == 0 {
+		t.Log("No shopping lists found")
+		return
 	}
 
 	for _, list := range lists {

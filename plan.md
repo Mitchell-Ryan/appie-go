@@ -200,9 +200,9 @@ func main() {
 - [x] Remove items
 - [x] Get order summary
 
-### Phase 4: Shopping List ⚠️
+### Phase 4: Shopping List ✅
 
-- [x] Get shopping lists (requires more API discovery)
+- [x] Get shopping lists
 - [ ] Add/remove items (endpoint needs verification)
 
 ### Phase 5: Member ⚠️
@@ -230,7 +230,7 @@ func main() {
 | `auth.go` | Login, token refresh, logout | ✅ |
 | `products.go` | Product search and details | ✅ |
 | `order.go` | Order management | ✅ |
-| `shoppinglist.go` | Shopping list (partial) | ⚠️ |
+| `shoppinglist.go` | Shopping list | ✅ |
 | `member.go` | Member profile (partial) | ⚠️ |
 | `appie_test.go` | Integration tests | ✅ |
 | `cmd/login/main.go` | CLI login tool | ✅ |
@@ -251,7 +251,7 @@ func main() {
 | `GetProduct()` | ✅ | |
 | `GetBonusProducts()` | ✅ | Returns 0 products when category has no bonus |
 | `GetOrder()` | ✅ | |
-| `GetShoppingLists()` | ⏸️ | API requires productId param |
+| `GetShoppingLists()` | ✅ | API requires productId param (pass 0 for default) |
 | `GetMember()` | ⏸️ | Uses GraphQL - needs schema |
 | `GetBonusCard()` | ⏸️ | Endpoint needs verification |
 
@@ -259,9 +259,9 @@ func main() {
 
 ## Next Steps
 
-1. **Shopping List API Discovery**: The `/lists/v3/lists` endpoint requires a `productId` parameter. Need to discover the endpoint for listing all lists.
+1. **Member GraphQL**: The member profile uses a GraphQL query called `FetchMember`. Need to capture the exact query structure.
 
-2. **Member GraphQL**: The member profile uses a GraphQL query called `FetchMember`. Need to capture the exact query structure.
+2. **Shopping List Mutations**: Discover endpoints for adding/removing items from lists.
 
 3. **Add More Tests**: Add tests for AddToOrder, RemoveFromOrder, etc.
 
