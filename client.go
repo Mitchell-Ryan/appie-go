@@ -1,0 +1,263 @@
+package appie
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"sync"
+)
+
+const (
+	defaultBaseURL    = "https://api.ah.nl"
+	defaultUserAgent  = "Appie/9.28 (iPhone17,3; iPhone; CPU OS 26_1 like Mac OS X)"
+	defaultClientID   = "appie-ios"
+	defaultClientVersion = "9.28"
+)
+
+// Client is the AH API client.
+type Client struct {
+	httpClient *http.Client
+	baseURL    string
+	userAgent  string
+	clientID   string
+	clientVersion string
+
+	mu           sync.RWMutex
+	accessToken  string
+	refreshToken string
+	memberID     string
+	orderID      string
+	orderHash    string
+
+	configPath string
+}
+
+// Option configures the client.
+type Option func(*Client)
+
+// WithHTTPClient sets a custom HTTP client.
+func WithHTTPClient(hc *http.Client) Option {
+	return func(c *Client) {
+		c.httpClient = hc
+	}
+}
+
+// WithBaseURL sets a custom base URL.
+func WithBaseURL(url string) Option {
+	return func(c *Client) {
+		c.baseURL = url
+	}
+}
+
+// WithTokens sets the access and refresh tokens.
+func WithTokens(accessToken, refreshToken string) Option {
+	return func(c *Client) {
+		c.accessToken = accessToken
+		c.refreshToken = refreshToken
+	}
+}
+
+// WithConfigPath sets the path to the config file.
+func WithConfigPath(path string) Option {
+	return func(c *Client) {
+		c.configPath = path
+	}
+}
+
+// New creates a new AH API client.
+func New(opts ...Option) *Client {
+	c := &Client{
+		httpClient:    http.DefaultClient,
+		baseURL:       defaultBaseURL,
+		userAgent:     defaultUserAgent,
+		clientID:      defaultClientID,
+		clientVersion: defaultClientVersion,
+	}
+
+	for _, opt := range opts {
+		opt(c)
+	}
+
+	return c
+}
+
+// NewWithConfig creates a new client and loads config from the given path.
+func NewWithConfig(configPath string) (*Client, error) {
+	c := New(WithConfigPath(configPath))
+
+	if err := c.LoadConfig(); err != nil {
+		if os.IsNotExist(err) {
+			return c, nil // Config doesn't exist yet, that's OK
+		}
+		return nil, err
+	}
+
+	return c, nil
+}
+
+// LoadConfig loads the configuration from the config file.
+func (c *Client) LoadConfig() error {
+	if c.configPath == "" {
+		return fmt.Errorf("no config path set")
+	}
+
+	data, err := os.ReadFile(c.configPath)
+	if err != nil {
+		return err
+	}
+
+	var cfg Config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return fmt.Errorf("failed to parse config: %w", err)
+	}
+
+	c.mu.Lock()
+	c.accessToken = cfg.AccessToken
+	c.refreshToken = cfg.RefreshToken
+	c.memberID = cfg.MemberID
+	c.mu.Unlock()
+
+	return nil
+}
+
+// SaveConfig saves the current configuration to the config file.
+func (c *Client) SaveConfig() error {
+	if c.configPath == "" {
+		return fmt.Errorf("no config path set")
+	}
+
+	c.mu.RLock()
+	cfg := Config{
+		AccessToken:  c.accessToken,
+		RefreshToken: c.refreshToken,
+		MemberID:     c.memberID,
+	}
+	c.mu.RUnlock()
+
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(c.configPath, data, 0600)
+}
+
+// AccessToken returns the current access token.
+func (c *Client) AccessToken() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.accessToken
+}
+
+// RefreshTokenValue returns the current refresh token.
+func (c *Client) RefreshTokenValue() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.refreshToken
+}
+
+// MemberID returns the current member ID.
+func (c *Client) MemberID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.memberID
+}
+
+// IsAuthenticated returns true if the client has an access token.
+func (c *Client) IsAuthenticated() bool {
+	return c.AccessToken() != ""
+}
+
+// setHeaders sets the common headers for API requests.
+func (c *Client) setHeaders(req *http.Request) {
+	req.Header.Set("User-Agent", c.userAgent)
+	req.Header.Set("x-client-name", c.clientID)
+	req.Header.Set("x-client-version", c.clientVersion)
+	req.Header.Set("x-application", "AHWEBSHOP")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+
+	c.mu.RLock()
+	if c.accessToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.accessToken)
+	}
+	if c.orderID != "" {
+		req.Header.Set("appie-current-order-id", c.orderID)
+		req.Header.Set("appie-current-order-hash", c.orderHash)
+	}
+	c.mu.RUnlock()
+}
+
+// doRequest performs an HTTP request and decodes the response.
+func (c *Client) doRequest(ctx context.Context, method, path string, body, result any) error {
+	var bodyReader io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			return fmt.Errorf("failed to marshal request body: %w", err)
+		}
+		bodyReader = bytes.NewReader(data)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, bodyReader)
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+	c.setHeaders(req)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		var apiErr apiError
+		if json.Unmarshal(respBody, &apiErr) == nil && (apiErr.Code != "" || apiErr.Message != "") {
+			return &apiErr
+		}
+		return fmt.Errorf("API error: %d %s", resp.StatusCode, string(respBody))
+	}
+
+	if result != nil && len(respBody) > 0 {
+		if err := json.Unmarshal(respBody, result); err != nil {
+			return fmt.Errorf("failed to decode response: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// doGraphQL performs a GraphQL request.
+func (c *Client) doGraphQL(ctx context.Context, query string, variables map[string]any, result any) error {
+	req := graphQLRequest{
+		Query:     query,
+		Variables: variables,
+	}
+
+	var resp graphQLResponse[json.RawMessage]
+	if err := c.doRequest(ctx, http.MethodPost, "/graphql", req, &resp); err != nil {
+		return err
+	}
+
+	if len(resp.Errors) > 0 {
+		return fmt.Errorf("graphql error: %s", resp.Errors[0].Message)
+	}
+
+	if result != nil {
+		if err := json.Unmarshal(resp.Data, result); err != nil {
+			return fmt.Errorf("failed to decode graphql response: %w", err)
+		}
+	}
+
+	return nil
+}
