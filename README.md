@@ -2,6 +2,8 @@
 
 Go client library for the Albert Heijn mobile API.
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/gwillem/appie-go.svg)](https://pkg.go.dev/github.com/gwillem/appie-go)
+
 ## Installation
 
 ```bash
