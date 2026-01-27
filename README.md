@@ -84,6 +84,24 @@ if !client.IsAuthenticated() {
 }
 ```
 
+### Receipts (Kassabonnen)
+
+Retrieve in-store purchase receipts:
+
+```go
+// Get all receipts
+receipts, err := client.GetReceipts(ctx)
+for _, r := range receipts {
+    fmt.Printf("%s: %s - €%.2f\n", r.Date, r.StoreName, r.TotalAmount)
+}
+
+// Get receipt details with items
+receipt, err := client.GetReceipt(ctx, receipts[0].TransactionID)
+for _, item := range receipt.Items {
+    fmt.Printf("  %s x%d - €%.2f\n", item.Description, item.Quantity, item.Amount)
+}
+```
+
 ## API Reference
 
 See [pkg.go.dev/github.com/gwillem/appie-go](https://pkg.go.dev/github.com/gwillem/appie-go) for full documentation.

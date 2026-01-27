@@ -258,6 +258,36 @@ type graphQLError struct {
 	Path    []any  `json:"path,omitempty"`
 }
 
+// Receipt represents an in-store purchase receipt (kassabon).
+type Receipt struct {
+	// TransactionID uniquely identifies this receipt.
+	TransactionID string `json:"transactionId"`
+	// Date is the purchase date/time.
+	Date string `json:"date"`
+	// StoreName is the store where the purchase was made.
+	StoreName string `json:"storeName"`
+	// StoreID is the store identifier.
+	StoreID int `json:"storeId,omitempty"`
+	// TotalAmount is the total purchase amount in EUR.
+	TotalAmount float64 `json:"totalAmount"`
+	// Items contains the purchased products (only in detailed receipt).
+	Items []ReceiptItem `json:"items,omitempty"`
+}
+
+// ReceiptItem represents a single item on a receipt.
+type ReceiptItem struct {
+	// Description is the product name/description.
+	Description string `json:"description"`
+	// Quantity is the number of items purchased.
+	Quantity int `json:"quantity"`
+	// Amount is the total price for this line item.
+	Amount float64 `json:"amount"`
+	// UnitPrice is the price per unit.
+	UnitPrice float64 `json:"unitPrice,omitempty"`
+	// ProductID is the webshop product ID if available.
+	ProductID int `json:"productId,omitempty"`
+}
+
 // API error response
 type apiError struct {
 	Code    string `json:"code"`

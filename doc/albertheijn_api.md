@@ -21,15 +21,19 @@ Base URL: `https://api.ah.nl`
 | | Metadata | |
 | **Orders** | Get active | ✅ |
 | | Add/update items | ✅ |
+| | Update state | ✅ |
+| | Details by taxonomy | ✅ |
+| | Download invoice (PDF) | ✅ |
 | | Checkout | |
-| | Details by taxonomy | |
 | **Shopping Lists** | Get lists (v3) | ✅ |
-| | Get items (v2) | |
+| | Get items (v2) | ✅ |
 | **Member** | FetchMember (GraphQL) | ✅ |
 | **Stores** | FetchStore | |
 | | GetFavoriteStore | |
 | **Recommendations** | Crosssells | |
-| | Don't forget | |
+| | Don't forget | ✅ |
+| **Receipts** | Get all receipts | ✅ |
+| | Get receipt by ID | ✅ |
 | **Config** | Feature flags | ✅ |
 | | Version check | |
 
@@ -293,11 +297,93 @@ PUT /mobile-services/order/v1/items?sortBy=DEFAULT
 }
 ```
 
+### Update Order State
+
+```
+PUT /mobile-services/order/v1/<orderId>/state?orderBy=DEFAULT
+```
+
+**Request:** Plain text body (e.g., `RESET`)
+
+**Response (409 Conflict):**
+```json
+{
+  "status": 409,
+  "message": "{\"success\":false,\"errorCode\":\"409\",\"errorMessage\":\"Unable to update, closing time has passed for order\"}",
+  "correlationId": "...",
+  "timestamp": "2026-01-23T10:58:33.222Z"
+}
+```
+
 ### Get Order Details (grouped by taxonomy)
 
 ```
 GET /mobile-services/order/v1/<orderId>/details-grouped-by-taxonomy
 ```
+
+**Response:**
+```json
+{
+  "orderId": 229775812,
+  "deliveryDate": "2025-12-09",
+  "orderState": "DELIVERED",
+  "closingTime": "2025-12-08T22:59:00Z",
+  "deliveryType": "HOME",
+  "deliveryTimePeriod": {
+    "startDateTime": "2025-12-09T18:00:00",
+    "endDateTime": "2025-12-09T20:00:00",
+    "startTimeUtc": "2025-12-09T17:00:00Z",
+    "endTimeUtc": "2025-12-09T19:00:00Z"
+  },
+  "groupedProductsInTaxonomy": [
+    {
+      "taxonomyName": "Groente, aardappelen",
+      "orderedProducts": [
+        {
+          "amount": 1,
+          "quantity": 1,
+          "allocatedQuantity": 1,
+          "product": {
+            "webshopId": 164358,
+            "title": "AH Oranje zoete aardappel",
+            "brand": "AH",
+            "salesUnitSize": "1 kg",
+            "priceBeforeBonus": 3.79,
+            "isBonus": false,
+            "isPreviouslyBought": true
+          },
+          "position": 6
+        }
+      ]
+    }
+  ],
+  "invoiceId": "2294567-00199",
+  "cancellable": false,
+  "orderPayments": [],
+  "address": {
+    "street": "...",
+    "houseNumber": 39,
+    "zipCode": 3522,
+    "zipCodeExtra": "JS",
+    "city": "UTRECHT",
+    "countryCode": "NLD",
+    "type": "H"
+  },
+  "orderMethod": "PLANSERVICE",
+  "reopenable": false
+}
+```
+
+### Download Invoice (PDF)
+
+```
+GET /mobile-services/order/v1/invoice/download?invoiceId=<invoiceId>
+```
+
+**Query Parameters:**
+- `invoiceId` - Invoice ID from order details (e.g., "2294567-00199")
+
+**Response:** Binary PDF file
 
 ### Get Checkout Info
 
@@ -351,6 +437,88 @@ Note: The `productId` parameter is required but returns all lists regardless of 
 GET /mobile-services/shoppinglist/v2/items
 ```
 
+**Response:**
+```json
+{
+  "id": "943e873f-9a64-403b-becb-c92f0978eb5d",
+  "items": [
+    {
+      "listItemId": 0,
+      "strikedthrough": false,
+      "quantity": 1,
+      "description": "350 g koelverse vegan shoarma",
+      "type": "SHOPPABLE",
+      "originCode": "TXT",
+      "position": 32,
+      "sorting": {
+        "position": 1
+      },
+      "vagueTermDetails": {
+        "searchTermValue": "350 g koelverse vegan shoarma",
+        "bonus": false
+      }
+    }
+  ],
+  "dateLastSynced": "2026-01-23T11:59:19",
+  "dateLastSyncedMillis": 1769165959010,
+  "activeSorting": "E",
+  "storeNumber": 0
+}
+```
+
+---
+
+## Receipts (Kassabonnen)
+
+In-store purchase receipts from physical AH stores.
+
+### Get All Receipts
+
+```
+GET /mobile-services/v1/receipts
+```
+
+**Response:**
+```json
+{
+  "receipts": [
+    {
+      "transactionId": "1234567890",
+      "datetime": "2026-01-20T14:30:00",
+      "storeId": 1234,
+      "storeName": "AH Utrecht Centrum",
+      "total": 45.67
+    }
+  ]
+}
+```
+
+### Get Receipt Details
+
+```
+GET /mobile-services/v2/receipts/<transactionId>
+```
+
+**Response:**
+```json
+{
+  "transactionId": "1234567890",
+  "datetime": "2026-01-20T14:30:00",
+  "storeId": 1234,
+  "storeName": "AH Utrecht Centrum",
+  "total": 45.67,
+  "receiptItems": [
+    {
+      "description": "AH Halfvolle melk",
+      "quantity": 2,
+      "amount": 2.58,
+      "unitPrice": 1.29,
+      "productId": 12345
+    }
+  ]
+}
+```
+
 ---
 
 ## Bonus / Promotions
@@ -393,6 +561,41 @@ POST /mobile-services/v2/recommendations/crosssells
 
 ```
 POST /mobile-services/v2/recommendations/dontforgetlane
+```
+
+**Request:**
+```json
+{
+  "positiveCmOnly": true,
+  "offset": 0,
+  "usecaseId": "app_home",
+  "basketItems": [],
+  "limit": 7
+}
+```
+
+**Response:**
+```json
+{
+  "dataLakeModel": {
+    "name": "",
+    "requestId": "",
+    "version": ""
+  },
+  "productCards": [
+    {
+      "webshopId": 2600,
+      "title": "AH Goudse jong 48+ plakken",
+      "brand": "AH",
+      "salesUnitSize": "190 g",
+      "images": [...],
+      "isBonus": true,
+      "bonusMechanism": "2e halve prijs",
+      "priceBeforeBonus": 2.95,
+      "currentPrice": 2.21
+    }
+  ]
+}
 ```
 
 ---
@@ -440,6 +643,7 @@ apollographql-client-version: 9.28-260102201630
 | Operation | Description | Status |
 |-----------|-------------|--------|
 | FetchMember | Get member profile, address, cards | ✅ Implemented |
+| FetchOrderTrackTrace | Track and trace info for order | ✅ Implemented |
 | FetchEntryPoints | Home screen entry points | |
 | FetchCuratedLists | Curated shopping lists | |
 | FetchNBACard | Next best action card | |
@@ -524,6 +728,67 @@ fragment MemberFragment on Member {
   }
 }
 ```
+
+#### FetchOrderTrackTrace
+
+Fetches track and trace information for an order.
+
+```graphql
+query FetchOrderTrackTrace($orderId: Int!) {
+  order(id: $orderId) {
+    __typename
+    delivery {
+      __typename
+      trackAndTraceV2 {
+        __typename
+        orderId
+        type
+        orderType
+        message
+        etaBlock {
+          __typename
+          range {
+            __typename
+            start
+            end
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+**Variables:**
+```json
+{
+  "orderId": 229775812
+}
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "order": {
+      "__typename": "Order",
+      "delivery": {
+        "__typename": "Delivery",
+        "trackAndTraceV2": {
+          "__typename": "TrackAndTraceV2",
+          "orderId": 229775812,
+          "type": "DELIVERED",
+          "orderType": "HOME_DELIVERY",
+          "message": "Je boodschappen zijn bezorgd.",
+          "etaBlock": null
+        }
+      }
+    }
+  }
+}
+```
+
+**Track Types:** `DELIVERED`, `IN_TRANSIT`, `PREPARING`, etc.
 
 #### FetchEntryPoints
 
